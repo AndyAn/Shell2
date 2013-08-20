@@ -1,0 +1,27 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<Syntax>
+    <Info>
+        <Name>Hosts</Name>
+        <Extension>
+            <Item>host</Item>
+        </Extension>
+    </Info>
+    <RuleSet>
+        <Rule>
+            <Name>IP</Name>
+            <Identify>(?&lt;=^[ \t]*)((25[0-5])|(2[0-4]\d)|(1\d\d)|([1-9]\d)|\d)(\.((25[0-5])|(2[0-4]\d)|(1\d\d)|([1-9]\d)|\d)){3}</Identify>
+            <Color>#ED890C</Color>
+        </Rule>
+        <Rule>
+            <Name>DomainName</Name>
+            <Identify>((?&lt;=^[^# \t]+[ \t]+)|(?&lt;=^([^# \t]+[ \t]+)+))[a-zA-Z0-9][-a-zA-Z0-9\.]{0,62}(#|$|\r|\n| |\t)</Identify>
+            <Color>#93D1F0</Color>
+        </Rule>
+        <Rule>
+            <Name>Comment</Name>
+            <Identify>#.*$</Identify>
+            <Color>#666</Color>
+        </Rule>
+    </RuleSet>
+    <!--(?=[ \t]+[a-zA-Z0-9][-a-zA-Z0-9\.]{0,62})-->
+</Syntax>
