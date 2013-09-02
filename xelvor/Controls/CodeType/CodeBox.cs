@@ -55,9 +55,8 @@ namespace xelvor.Controls.CodeType
             this.InvalidateVisual();
         }
 
-
         public static DependencyProperty BaseForegroundProperty = DependencyProperty.Register("BaseForeground", typeof(Brush), typeof(CodeBox),
-   new FrameworkPropertyMetadata(new SolidColorBrush(Colors.Black), FrameworkPropertyMetadataOptions.AffectsRender));
+        new FrameworkPropertyMetadata(new SolidColorBrush(Colors.Black), FrameworkPropertyMetadataOptions.AffectsRender));
 
         [Bindable(true)]
         public Brush BaseForeground
@@ -67,7 +66,7 @@ namespace xelvor.Controls.CodeType
         }
 
         public static DependencyProperty CodeBoxBackgroundProperty = DependencyProperty.Register("CodeBoxBackground", typeof(Brush), typeof(CodeBox),
-   new FrameworkPropertyMetadata(new SolidColorBrush(Colors.White), FrameworkPropertyMetadataOptions.AffectsRender));
+        new FrameworkPropertyMetadata(new SolidColorBrush(Colors.White), FrameworkPropertyMetadataOptions.AffectsRender));
 
         [Bindable(true)]
         public Brush CodeBoxBackground
@@ -132,7 +131,7 @@ namespace xelvor.Controls.CodeType
         }
 
         public static DependencyProperty DecorationSchemeProperty = DependencyProperty.Register("DecorationScheme", typeof(DecorationScheme), typeof(CodeBox),
-   new FrameworkPropertyMetadata(new DecorationScheme(), FrameworkPropertyMetadataOptions.AffectsRender));
+        new FrameworkPropertyMetadata(new DecorationScheme(), FrameworkPropertyMetadataOptions.AffectsRender));
 
         /// <summary>
         /// The DecorationScheme used for the CodeBox
@@ -164,7 +163,7 @@ namespace xelvor.Controls.CodeType
             }
             else
             {
-                if (this.LineCount == 0)
+                if (base.LineCount == 0)
                 {
                     ReRenderLastRuntimeRender(drawingContext);
                     renderTimer.IsEnabled = true;
@@ -195,7 +194,7 @@ namespace xelvor.Controls.CodeType
             Double topMargin = 2.0 + this.BorderThickness.Top;
 
             formattedText = new FormattedText(
-                   this.VisibleText,
+                    this.VisibleText,
                     CultureInfo.GetCultureInfo("en-us"),
                     FlowDirection.LeftToRight,
                     new Typeface(this.FontFamily.Source),
@@ -408,7 +407,7 @@ namespace xelvor.Controls.CodeType
             DisplayGeometry(drawingContext, preparedDecorations[EDecorationType.Strikethrough], renderPoint);
             DisplayGeometry(drawingContext, preparedDecorations[EDecorationType.Underline], renderPoint);
         }
-        
+
         #endregion
 
         /// <summary>
@@ -577,7 +576,7 @@ namespace xelvor.Controls.CodeType
                     int firstLine = GetFirstVisibleLineIndex();
                     int lastLine = GetLastVisibleLineIndex();
 
-                    int lineCount = this.LineCount;
+                    int lineCount = base.LineCount;
                     int firstChar = (firstLine == 0) ? 0 : GetCharacterIndexFromLineIndex(firstLine);
 
                     int lastChar = GetCharacterIndexFromLineIndex(lastLine) + GetLineLength(lastLine) - 1;
@@ -649,6 +648,60 @@ namespace xelvor.Controls.CodeType
             {
                 return formattedText.WidthIncludingTrailingWhitespace;
             }
+        }
+
+        public new int GetLineIndexFromCharacterIndex(int charIndex)
+        {
+            int[] linePos = MinLineStartCharcterPositions();
+            int index = 0;
+
+            for (int i = 1; i < linePos.Length; i++)
+            {
+                if (linePos[i - 1] <= charIndex && linePos[i] > charIndex)
+                {
+                    break;
+                }
+                else
+                {
+                    index++;
+                }
+            }
+
+            return index;
+        }
+
+        public int GetStartIndexFromLineIndex(int lineIndex)
+        {
+            return MinLineStartCharcterPositions()[lineIndex];
+
+        }
+
+        public new int LineCount
+        {
+            get
+            {
+                return MinLineStartCharcterPositions().Length;
+            }
+        }
+
+        public new string GetLineText(int lineIndex)
+        {
+            int line = lineIndex;
+            string text = "";
+
+            int[] linePos = MinLineStartCharcterPositions();
+            int[] lineStart = VisibleLineStartCharcterPositions();
+
+            if (line == LineCount - 1)
+            {
+                text = Text.Substring(linePos[line], Text.Length - linePos[line]);
+            }
+            else
+            {
+                text = Text.Substring(linePos[line], linePos[line + 1] - linePos[line]);
+            }
+
+            return text;
         }
 
         #region line number calculations

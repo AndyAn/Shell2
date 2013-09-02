@@ -3,6 +3,9 @@ using System.Text;
 using System.Diagnostics;
 using System.ComponentModel;
 using System.IO;
+using System.Management;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
 
 //*********************************************************************************************
 //  Author:  Dave Kerr                                                                          
@@ -23,6 +26,114 @@ namespace xelvor.Core
     /// </summary>
     public class ProcessInterface
     {
+        #region Variables
+
+        /// <summary>
+        /// The current process.
+        /// </summary>
+        private Process process;
+        
+        /// <summary>
+        /// The input writer.
+        /// </summary>
+        private StreamWriter inputWriter;
+        
+        /// <summary>
+        /// The output reader.
+        /// </summary>
+        private TextReader outputReader;
+        
+        /// <summary>
+        /// The error reader.
+        /// </summary>
+        private TextReader errorReader;
+        
+        /// <summary>
+        /// The output worker.
+        /// </summary>
+        private BackgroundWorker outputWorker = new BackgroundWorker();
+        
+        /// <summary>
+        /// The error worker.
+        /// </summary>
+        private BackgroundWorker errorWorker = new BackgroundWorker();
+
+        /// <summary>
+        /// Message Stack Worker
+        /// </summary>
+        private BackgroundWorker mqWorker = new BackgroundWorker();
+
+        /// <summary>
+        /// Output Queue
+        /// </summary>
+        private Queue<MessagePackage> msgQueue = new Queue<MessagePackage>();
+
+        /// <summary>
+        /// Current process file name.
+        /// </summary>
+        private string processFileName;
+
+        /// <summary>
+        /// Arguments sent to the current process.
+        /// </summary>
+        private string processArguments;
+
+        #endregion
+
+        #region Properties
+
+        /// <summary>
+        /// Gets a value indicating whether this instance is process running.
+        /// </summary>
+        /// <value>
+        /// 	<c>true</c> if this instance is process running; otherwise, <c>false</c>.
+        /// </value>
+        public bool IsProcessRunning
+        {
+            get
+            {
+                try
+                {
+                    return (process != null && process.HasExited == false);
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets the internal process.
+        /// </summary>
+        public Process Process
+        {
+            get { return process; }
+        }
+
+        /// <summary>
+        /// Gets the name of the process.
+        /// </summary>
+        /// <value>
+        /// The name of the process.
+        /// </value>
+        public string ProcessFileName
+        {
+            get { return processFileName; }
+        }
+
+        /// <summary>
+        /// Gets the process arguments.
+        /// </summary>
+        public string ProcessArguments
+        {
+            get { return processArguments; }
+        }
+
+        #endregion
+
+        #region Constructor
+
         /// <summary>
         /// Initializes a new instance of the <see cref="ProcessInterface"/> class.
         /// </summary>
@@ -41,6 +152,10 @@ namespace xelvor.Core
             errorWorker.ProgressChanged += new ProgressChangedEventHandler(errorWorker_ProgressChanged);
         }
 
+        #endregion
+
+        #region Private Events
+
         /// <summary>
         /// Handles the ProgressChanged event of the outputWorker control.
         /// </summary>
@@ -52,7 +167,9 @@ namespace xelvor.Core
             if (e.UserState is string)
             {
                 //  Fire the output event.
-                FireProcessOutputEvent(e.UserState as string);
+                //FireProcessOutputEvent(e.UserState as string);
+
+                msgQueue.Enqueue(new MessagePackage() { Message = e.UserState.ToString(), Type = MessageType.Message});
             }
         }
 
@@ -68,12 +185,16 @@ namespace xelvor.Core
                 //  Any lines to read?
                 int count = 0;
                 char[] buffer = new char[1024];
+
                 do
                 {
                     StringBuilder builder = new StringBuilder();
                     count = outputReader.Read(buffer, 0, 1024);
                     builder.Append(buffer, 0, count);
                     outputWorker.ReportProgress(0, builder.ToString());
+
+                    // for debugging...
+                    System.Diagnostics.Debug.Write(builder.ToString());
                 } while (count > 0);
 
                 System.Threading.Thread.Sleep(200);
@@ -91,7 +212,9 @@ namespace xelvor.Core
             if (e.UserState is string)
             {
                 //  Fire the error event.
-                FireProcessErrorEvent(e.UserState as string);
+                //FireProcessErrorEvent(e.UserState as string);
+
+                msgQueue.Enqueue(new MessagePackage() { Message = e.UserState.ToString(), Type = MessageType.Error });
             }
         }
 
@@ -113,11 +236,39 @@ namespace xelvor.Core
                     count = errorReader.Read(buffer, 0, 1024);
                     builder.Append(buffer, 0, count);
                     errorWorker.ReportProgress(0, builder.ToString());
+
+                    // for debugging...
+                    System.Diagnostics.Debug.Write(builder.ToString());
                 } while (count > 0);
 
                 System.Threading.Thread.Sleep(200);
             }
         }
+
+        /// <summary>
+        /// Handles the Exited event of the currentProcess control.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">The <see cref="System.EventArgs"/> instance containing the event data.</param>
+        void currentProcess_Exited(object sender, EventArgs e)
+        {
+            //  Fire process exited.
+            FireProcessExitEvent(process.ExitCode);
+
+            //  Disable the threads.
+            outputWorker.CancelAsync();
+            errorWorker.CancelAsync();
+            inputWriter = null;
+            outputReader = null;
+            errorReader = null;
+            process = null;
+            processFileName = null;
+            processArguments = null;
+        }
+
+        #endregion
+
+        #region Public Methods
 
         /// <summary>
         /// Runs a process.
@@ -133,6 +284,7 @@ namespace xelvor.Core
             processStartInfo.UseShellExecute = false;
             processStartInfo.ErrorDialog = false;
             processStartInfo.CreateNoWindow = true;
+            processStartInfo.WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
             //  Specify redirection.
             processStartInfo.RedirectStandardError = true;
@@ -185,25 +337,81 @@ namespace xelvor.Core
             process.Kill();
         }
 
-        /// <summary>
-        /// Handles the Exited event of the currentProcess control.
-        /// </summary>
-        /// <param name="sender">The source of the event.</param>
-        /// <param name="e">The <see cref="System.EventArgs"/> instance containing the event data.</param>
-        void currentProcess_Exited(object sender, EventArgs e)
+        public List<int> GetChildProcessIds()
         {
-            //  Fire process exited.
-            FireProcessExitEvent(process.ExitCode);
+            List<int> procList = new List<int>();
+            Process[] procs = Process.GetProcesses();
 
-            //  Disable the threads.
-            outputWorker.CancelAsync();
-            errorWorker.CancelAsync();
-            inputWriter = null;
-            outputReader = null;
-            errorReader = null;
-            process = null;
-            processFileName = null;
-            processArguments = null;
+            ManagementObjectSearcher objOSDetails = new ManagementObjectSearcher("SELECT * FROM Win32_Process WHERE ParentProcessId = " + process.Id);
+            foreach (ManagementObject mo in objOSDetails.Get())
+            {
+                procList.Add(Convert.ToInt32(mo["Handle"]));
+            }
+
+            return procList;
+        }
+
+        public void KillProcess(int pid)
+        {
+            //try
+            //{
+            //    Process.GetProcessById(pid).Kill();
+            //}
+            //catch
+            //{
+            //}
+
+            //This does not require the console window to be visible.
+            if (AttachConsole((uint)pid))
+            {
+                //Disable Ctrl-C handling for our program
+                SetConsoleCtrlHandler(null, true);
+                GenerateConsoleCtrlEvent(CtrlTypes.CTRL_C_EVENT, 0);
+
+                //Must wait here. If we don't and re-enable Ctrl-C handling below too fast, we might terminate ourselves.
+                Process.GetProcessById(pid).WaitForExit();
+
+                FreeConsole();
+
+                //Re-enable Ctrl-C handling or any subsequently started programs will inherit the disabled state.
+                SetConsoleCtrlHandler(null, false);
+            }
+
+        }
+
+        [DllImport("kernel32.dll")]
+        static extern bool SetConsoleCtrlHandler(ConsoleCtrlDelegate HandlerRoutine, bool Add);
+        delegate Boolean ConsoleCtrlDelegate(CtrlTypes CtrlType);
+        enum CtrlTypes : uint
+        {
+            CTRL_C_EVENT = 0,
+            CTRL_BREAK_EVENT,
+            CTRL_CLOSE_EVENT,
+            CTRL_LOGOFF_EVENT = 5,
+            CTRL_SHUTDOWN_EVENT
+        }
+
+        [DllImport("kernel32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GenerateConsoleCtrlEvent(CtrlTypes dwCtrlEvent, uint dwProcessGroupId);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool AttachConsole(uint dwProcessId);
+
+        [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
+        static extern bool FreeConsole();
+
+        #endregion
+
+        #region Private Methods
+
+        /// <summary>
+        /// Fires the process output event.
+        /// </summary>
+        /// <param name="content">The content</param>
+        /// <param name="error">Type of the content, message, error</param>
+        private void FireProcessOutputEvent(string content, bool error)
+        {
         }
 
         /// <summary>
@@ -267,46 +475,10 @@ namespace xelvor.Core
             }
         }
 
-        /// <summary>
-        /// The current process.
-        /// </summary>
-        private Process process;
-        
-        /// <summary>
-        /// The input writer.
-        /// </summary>
-        private StreamWriter inputWriter;
-        
-        /// <summary>
-        /// The output reader.
-        /// </summary>
-        private TextReader outputReader;
-        
-        /// <summary>
-        /// The error reader.
-        /// </summary>
-        private TextReader errorReader;
-        
-        /// <summary>
-        /// The output worker.
-        /// </summary>
-        private BackgroundWorker outputWorker = new BackgroundWorker();
-        
-        /// <summary>
-        /// The error worker.
-        /// </summary>
-        private BackgroundWorker errorWorker = new BackgroundWorker();
+        #endregion
 
-        /// <summary>
-        /// Current process file name.
-        /// </summary>
-        private string processFileName;
+        #region Public Event Definition
 
-        /// <summary>
-        /// Arguments sent to the current process.
-        /// </summary>
-        private string processArguments;
-        
         /// <summary>
         /// Occurs when process output is produced.
         /// </summary>
@@ -326,53 +498,7 @@ namespace xelvor.Core
         /// Occurs when the process ends.
         /// </summary>
         public event ProcessEventHanlder OnProcessExit;
-        
-        /// <summary>
-        /// Gets a value indicating whether this instance is process running.
-        /// </summary>
-        /// <value>
-        /// 	<c>true</c> if this instance is process running; otherwise, <c>false</c>.
-        /// </value>
-        public bool IsProcessRunning
-        {
-            get
-            {
-                try
-                {
-                    return (process != null && process.HasExited == false);
-                }
-                catch
-                {
-                    return false;
-                }
-            }
-        }
 
-        /// <summary>
-        /// Gets the internal process.
-        /// </summary>
-        public Process Process
-        {
-            get { return process; }
-        }
-
-        /// <summary>
-        /// Gets the name of the process.
-        /// </summary>
-        /// <value>
-        /// The name of the process.
-        /// </value>
-        public string ProcessFileName
-        {
-            get { return processFileName; }
-        }
-
-        /// <summary>
-        /// Gets the process arguments.
-        /// </summary>
-        public string ProcessArguments
-        {
-            get { return processArguments; }
-        }
+        #endregion
     }
 }

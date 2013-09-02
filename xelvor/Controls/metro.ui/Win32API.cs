@@ -2,11 +2,11 @@
 using System.Windows;
 using System.Runtime.InteropServices;
 
-namespace xelvor.Utils
+namespace AiP.Metro
 {
-    public class Win32API
+    internal sealed class Win32API
     {
-        public enum HitTest : int
+        internal enum HitTest : int
         {
             HTERROR = -2,
             HTTRANSPARENT = -1,
@@ -40,7 +40,7 @@ namespace xelvor.Utils
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        public struct MINMAXINFO
+        internal struct MINMAXINFO
         {
             public POINT ptReserved;
             public POINT ptMaxSize;
@@ -50,7 +50,7 @@ namespace xelvor.Utils
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        public struct POINT
+        internal struct POINT
         {
             public int x;
             public int y;
@@ -62,16 +62,24 @@ namespace xelvor.Utils
         }
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
-        public class MONITORINFO
+        internal class MONITORINFO
         {
-            public int cbSize = Marshal.SizeOf(typeof(MONITORINFO));
+            public int cbSize;
             public RECT rcMonitor;
             public RECT rcWork;
             public int dwFlags;
+
+            public MONITORINFO()
+            {
+                cbSize = Marshal.SizeOf(typeof(MONITORINFO));
+                rcMonitor = new RECT();
+                rcWork = new RECT();
+                dwFlags = 0;
+            }
         }
 
         [StructLayout(LayoutKind.Sequential, Pack = 0)]
-        public struct RECT
+        internal struct RECT
         {
             public int left;
             public int top;
@@ -147,13 +155,68 @@ namespace xelvor.Utils
             }
         }
 
-        [DllImport("user32")]
-        public static extern bool GetMonitorInfo(IntPtr hMonitor, MONITORINFO lpmi);
-        [DllImport("User32")]
-        public static extern IntPtr MonitorFromWindow(IntPtr handle, int flags);
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct MARGINS
+        {
+            public int leftWidth;
+            public int rightWidth;
+            public int topHeight;
+            public int bottomHeight;
+        }
 
-        public const int WM_NCHITTEST = 0x0084;
-        public const int WM_GETMINMAXINFO = 0x0024; // minimize/maximize
-        public const int WM_NCLBUTTONDBLCLK = 0x00A3;
+        [DllImport("user32")]
+        internal static extern bool GetMonitorInfo(IntPtr hMonitor, MONITORINFO lpmi);
+        [DllImport("User32")]
+        internal static extern IntPtr MonitorFromWindow(IntPtr handle, int flags);
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        internal static extern IntPtr SendMessage(IntPtr hWnd, UInt32 msg, IntPtr wParam, IntPtr lParam);
+        [DllImport("dwmapi.dll", PreserveSig = true)]
+        internal static extern Int32 DwmSetWindowAttribute(IntPtr hwnd, Int32 attr, ref Int32 attrValue, Int32 attrSize);
+        [DllImport("dwmapi.dll")]
+        internal static extern Int32 DwmExtendFrameIntoClientArea(IntPtr hWnd, ref MARGINS pMarInset);
+
+        internal const int WM_NCHITTEST = 0x0084;
+        internal const int WM_GETMINMAXINFO = 0x0024; // minimize/maximize
+        internal const int WM_NCLBUTTONDBLCLK = 0x00A3;
+        internal const int WM_SIZING = 0x0214;
+        internal const int WM_SIZE = 0x0005;
+
+        internal static void WmGetMinMaxInfo(IntPtr hwnd, IntPtr lParam)
+        {
+            Win32API.MINMAXINFO mmi = (Win32API.MINMAXINFO)Marshal.PtrToStructure(lParam, typeof(Win32API.MINMAXINFO));
+
+            // Adjust the maximized size and position to fit the work area 
+            // of the correct monitor.
+            int MONITOR_DEFAULTTONEAREST = 0x00000002;
+
+            IntPtr monitor = Win32API.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            if (monitor != IntPtr.Zero)
+            {
+                Win32API.MONITORINFO monitorInfo = new Win32API.MONITORINFO();
+                Win32API.GetMonitorInfo(monitor, monitorInfo);
+
+                Win32API.RECT rcWorkArea = monitorInfo.rcWork;
+                Win32API.RECT rcMonitorArea = monitorInfo.rcMonitor;
+
+                mmi.ptMaxPosition.x = Math.Abs(rcWorkArea.left - rcMonitorArea.left);
+                mmi.ptMaxPosition.y = Math.Abs(rcWorkArea.top - rcMonitorArea.top);
+
+                mmi.ptMaxSize.x = Math.Abs(rcWorkArea.right - rcWorkArea.left);
+                mmi.ptMaxSize.y = Math.Abs(rcWorkArea.bottom - rcWorkArea.top);
+            }
+
+            Marshal.StructureToPtr(mmi, lParam, true);
+        }
+
+        internal static void ShowShadowUnderWindow(IntPtr intPtr)
+        {
+            Win32API.MARGINS marInset = new Win32API.MARGINS();
+            marInset.bottomHeight = -1;
+            marInset.leftWidth = -1;
+            marInset.rightWidth = -1;
+            marInset.topHeight = -1;
+
+            Win32API.DwmExtendFrameIntoClientArea(intPtr, ref marInset);
+        }
     }
 }
