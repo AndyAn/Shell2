@@ -43,7 +43,6 @@
     <Reference Include="System" />
     <Reference Include="System.Data" />
     <Reference Include="System.Drawing" />
-    <Reference Include="System.Management" />
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
@@ -58,6 +57,10 @@
     <Reference Include="PresentationFramework" />
   </ItemGroup>
   <ItemGroup>
+    <ApplicationDefinition Include="App.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </ApplicationDefinition>
     <Compile Include="Controls\CodeType\CodeBox.cs" />
     <Compile Include="Controls\CodeType\CodeBoxApplicationSettings.cs" />
     <Compile Include="Controls\CodeType\CodeBoxRenderInfo.cs" />
@@ -82,27 +85,15 @@
     <Compile Include="Controls\CodeType\Pair.cs" />
     <Compile Include="Controls\CodeType\PointCollectionHelper.cs" />
     <Compile Include="Controls\CodeType\StackedRectangleGeometryHelper.cs" />
-    <Compile Include="Controls\metro.ui\ButtonExt.cs" />
-    <Compile Include="Controls\metro.ui\MessagePrompt.cs" />
-    <Compile Include="Controls\metro.ui\MetroBase.cs" />
-    <Compile Include="Controls\metro.ui\MetroBox.cs" />
-    <Compile Include="Controls\metro.ui\MetroFluidView.cs" />
-    <Compile Include="Controls\metro.ui\MetroWindow.cs" />
-    <Compile Include="Controls\metro.ui\ResourceHelper.cs" />
-    <Compile Include="Controls\metro.ui\Win32API.cs" />
     <Compile Include="Core\ProcessEventArgs.cs" />
     <Compile Include="Core\ProcessInterface.cs" />
     <Compile Include="Core\Settings.cs" />
-    <Compile Include="Main.cs" />
     <Compile Include="Utils\IconManager.cs" />
     <Compile Include="Utils\Log.cs" />
     <Compile Include="Utils\ObjectSerializer.cs" />
     <Compile Include="Utils\ResourceManager.cs" />
+    <Compile Include="Utils\Win32API.cs" />
     <Page Include="Controls\CodeType\CodeBox.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Include="Controls\metro.ui\Resources\Controls.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
@@ -110,6 +101,11 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Compile Include="App.xaml.cs">
+      <DependentUpon>App.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Controls\ButtonExt.cs" />
     <Compile Include="MainWindow.xaml.cs">
       <DependentUpon>MainWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
@@ -150,13 +146,6 @@
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Resources\icon.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="Controls\metro.ui\Resources\check.png" />
-    <Resource Include="Controls\metro.ui\Resources\info.png" />
-    <Resource Include="Controls\metro.ui\Resources\radiocheck.png" />
-    <Resource Include="Controls\metro.ui\Resources\radiouncheck.png" />
-    <Resource Include="Controls\metro.ui\Resources\uncheck.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

@@ -11,9 +11,6 @@ using xelvor.Controls.CodeType;
 using xelvor.Core;
 using System.IO;
 using System.Text.RegularExpressions;
-using System.Runtime.InteropServices;
-using System.Collections;
-using System.Management;
 
 namespace xelvor.Controls
 {
@@ -27,14 +24,9 @@ namespace xelvor.Controls
 
         bool runningCommand = false;
 
-        private Regex regPrompt = new Regex("[a-z]:(\\\\.+)*\\>.*$", RegexOptions.IgnoreCase);
+        Regex regPrompt = new Regex("[a-z]:(\\\\.+)*\\>.*$", RegexOptions.IgnoreCase);
         private ProcessInterface proc = new ProcessInterface();
-        private Brush defaultCaretBrush;
         private string lastInput;
-        private List<string> internalCommands = new List<string>() {
-                                                    "settings",
-                                                    "exit",
-                                                    "cls"};
 
         #endregion
 
@@ -75,7 +67,7 @@ namespace xelvor.Controls
         {
             get
             {
-                return ConsolePrompt.Length;
+                return ConsolePrompt.Length - 1;
             }
         }
 
@@ -85,8 +77,6 @@ namespace xelvor.Controls
 
         public Console2()
         {
-            defaultCaretBrush = CaretBrush;
-
             //Initialize process interface events
             proc.OnProcessOutput += new ProcessEventHanlder(proc_OnProcessOutput);
             proc.OnProcessError += new ProcessEventHanlder(proc_OnProcessError);
@@ -126,7 +116,6 @@ namespace xelvor.Controls
 
         void proc_OnProcessExit(object sender, ProcessEventArgs args)
         {
-            GC.Collect();
         }
 
         #endregion
@@ -136,24 +125,22 @@ namespace xelvor.Controls
         protected override void OnInitialized(EventArgs e)
         {
             base.OnInitialized(e);
+            base.Foreground = Brushes.Transparent;
+            base.Background = Brushes.Transparent;
+            base.CaretBrush = Brushes.WhiteSmoke;
+            base.FontFamily = ResourceManager.Font;
+            base.FontSize = 14.0;
+            base.HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden;
+            base.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+            base.TextWrapping = TextWrapping.WrapWithOverflow;
 
-            Foreground = Brushes.Transparent;
-            Background = Brushes.Transparent;
-            CaretBrush = Brushes.WhiteSmoke;
-            FontFamily = ResourceManager.Font;
-            FontSize = 14.0;
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden;
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-            TextWrapping = TextWrapping.WrapWithOverflow;
-            ContextMenu = null;
+            base.Loaded += new RoutedEventHandler(CodeTypeLoaded);
+            base.MaxLength = int.MaxValue;
+            base.AcceptsReturn = true;
+            base.AcceptsTab = false;
+            base.Focus();
 
-            Loaded += new RoutedEventHandler(CodeTypeLoaded);
-            MaxLength = int.MaxValue;
-            AcceptsReturn = true;
-            AcceptsTab = false;
-            Focus();
-
-            LineNumberMarginWidth = 0.0;
+            base.LineNumberMarginWidth = 0.0;
 
             // load syntax files
             //SyntaxManager.Initialize();
@@ -161,67 +148,6 @@ namespace xelvor.Controls
 
         protected override void OnPreviewMouseDown(MouseButtonEventArgs e)
         {
-            CaretBrush = Brushes.Transparent;
-
-            base.OnPreviewMouseDown(e);
-            //lastCaretIndex = CaretIndex;
-
-            if (e.RightButton == MouseButtonState.Pressed)
-            {
-                CaretIndex = GetCharacterIndexFromPoint(e.GetPosition(this), true) + 1;
-            }
-            //e.Handled = true;
-        }
-
-        protected override void OnMouseUp(MouseButtonEventArgs e)
-        {
-            base.OnMouseDown(e);
-
-            DocumentLine line = GetCurrentLine();
-            if (SelectedText.Length == 0)
-            {
-                if (line.Index != LineCount - 1)
-                {
-                    CaretIndex = Text.Length;
-                }
-                else
-                {
-                    if (line.PosInLine < StartColumn)
-                    {
-                        CaretIndex = Text.Length;
-                    }
-                }
-            }
-            
-            if (e.ChangedButton == MouseButton.Right)
-            {
-                if (line.Index != LineCount - 1 || CaretIndex == Text.Length)
-                {
-                    AppendText(Clipboard.GetText());
-                }
-                else
-                {
-                    Text = Text.Insert(CaretIndex, Clipboard.GetText());
-                }
-                CaretIndex = Text.Length;
-            }
-
-            if (SelectedText.Length > 0)
-            {
-                if (e.ChangedButton == MouseButton.Left)
-                {
-                    int startIndex = Text.IndexOf(SelectedText);
-                    int endIndex = startIndex + SelectedText.Length;
-
-                    if (CaretIndex >= startIndex && CaretIndex <= endIndex)
-                    {
-                        Clipboard.SetText(SelectedText);
-                        CaretIndex = Text.Length;
-                    }
-                }
-            }
-
-            CaretBrush = defaultCaretBrush;
             e.Handled = true;
         }
 
@@ -229,26 +155,6 @@ namespace xelvor.Controls
         {
             if (runningCommand)
             {
-                e.Handled = true;
-                return;
-            }
-
-            if ((e.KeyboardDevice.Modifiers & ModifierKeys.Control) == ModifierKeys.Control && e.Key == Key.C)
-            {
-                foreach (int pid in proc.GetChildProcessIds())
-                {
-                    proc.KillProcess(pid);
-                }
-
-                //foreach (IntPtr handle in proc.GetChildProcessHandles())
-                //{
-                //    proc.KillProcess(handle);
-                //}
-
-                //WriteOutput("Ctrl^C");
-
-                //System.Diagnostics.Debug.Print("Sent CTRL + C...");
-
                 e.Handled = true;
                 return;
             }
@@ -271,20 +177,23 @@ namespace xelvor.Controls
                     //epEvent.Handle = false;
                     //OnEnterPressing(this, epEvent);
 
-                    if (!ProcessInternalCommands(line.Text))
+                    //  Write the input.
+                    proc.WriteInput(line.Text);
+                    if (line.Text.ToLower().StartsWith("cd "))
                     {
-                        //  Write the input.
-                        lastInput = line.Text;
-                        proc.WriteInput(line.Text);
-                        if (line.Text.ToLower().StartsWith("cd "))
-                        {
-                            ConsolePrompt = string.Format("[{0}@{1} {2}]$ ", Environment.UserName, Environment.UserDomainName, Path.GetFileName(proc.Process.StartInfo.WorkingDirectory));
-                        }
+                        ConsolePrompt = string.Format("[{0}@{1} {2}]$ ", Environment.UserName, Environment.UserDomainName, Path.GetFileName(proc.Process.StartInfo.WorkingDirectory));
                     }
 
                     runningCommand = false;
 
-                    CaretIndex = Text.Length;
+                    //if (!epEvent.Handle)
+                    //{
+                    //    // internal command: settings
+                    //    base.AppendText("\r\nInternal Handled!");
+                    //}
+
+                    base.AppendText("\r\n" + ConsolePrompt);
+                    base.CaretIndex = base.Text.Length;
 
                     e.Handled = true;
                     break;
@@ -402,46 +311,36 @@ namespace xelvor.Controls
             base.ScrollToHome();
         }
 
+        public List<string> GetInternalCommands()
+        {
+            return new List<string>() {
+                "settings",
+                "exit"};
+        }
+
         #endregion
 
         #region Private Methods
 
-        private bool ProcessInternalCommands(string p)
-        {
-
-            return false;
-        }
-
         private void WriteOutput(string output)
         {
-            if (string.IsNullOrEmpty(lastInput) == false && output == lastInput) return;
-
-            if (output.Replace("\r\n", "") == lastInput)
-            {
-                output = "\r\n";
-            }
-
-            Match m = regPrompt.Match(output);
-            if (m.Success)
-            {
-                ConsolePrompt = string.Format("[{0}@{1} {2}]$ ", Environment.UserName, Environment.UserDomainName, Path.GetFileName(m.Value.Trim().Substring(0, m.Value.Trim().Length - 1)));
-                output = output.Replace(m.Value.Trim(), ConsolePrompt);
-            }
+            if (string.IsNullOrEmpty(lastInput) == false &&
+                (output == lastInput || output.Replace("\r\n", "") == lastInput))
+                return;
 
             Dispatcher.BeginInvoke(new EventHandler(
                 delegate(object sender, EventArgs e)
                 {
                     //  Write the output.
-                    AppendText(output);
+                    AppendText(regPrompt.Replace(output, ConsolePrompt));
                     ScrollToEnd();
                 }), new object[] { this, System.EventArgs.Empty });
         }
 
         private void CodeTypeLoaded(object sender, RoutedEventArgs e)
         {
-            //base.AppendText(ConsolePrompt);
+            base.AppendText(ConsolePrompt);
             base.CaretIndex = base.Text.Length;
-            Focusable = true;
 
             this.InvalidateVisual();
         }
@@ -458,26 +357,16 @@ namespace xelvor.Controls
 
     public class DocumentLine
     {
-        public DocumentLine(CodeBox doc, int lineIndex, string prompt)
+        public DocumentLine(TextBox doc, int lineIndex, string prompt)
         {
             Index = lineIndex;
-            OriginalText = doc.GetLineText(lineIndex);
-            Text = OriginalText;
-            if (Text.StartsWith(prompt))
-            {
-                Text = Text.Remove(0, prompt.Length);
-            }
+            Text = doc.GetLineText(lineIndex).Remove(0, prompt.Length);
             EndOffset = doc.GetCharacterIndexFromLineIndex(lineIndex) + doc.GetLineLength(lineIndex);
-            PosInLine = doc.CaretIndex - doc.GetStartIndexFromLineIndex(lineIndex);
         }
 
         public int Index { get; private set; }
 
         public string Text { get; private set; }
-
-        public string OriginalText { get; private set; }
-
-        public int PosInLine { get; private set; }
 
         public int EndOffset { get; private set; }
     }
